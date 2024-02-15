@@ -10,9 +10,10 @@ const int PORT = 5678;
 const char* ADDR = "127.0.0.1";
 
 int main()
-{
+{   
     int option = 1;
     int serverSock;
+    int testSock;
     struct sockaddr_in address;
 
     if ((serverSock = socket(AF_INET, SOCK_STREAM, 0)) == -1) 
@@ -41,5 +42,21 @@ int main()
         exit(EXIT_FAILURE);
     }
 
+    if (listen(serverSock, 10) == -1) 
+    {
+        fprintf(stderr, "listen() failed\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (testSock = accept(serverSock, (struct sockaddr*)&address, sizeof(address)) == -1)
+    {
+        fprintf(stderr, "accept() failed\n");
+        exit(EXIT_FAILURE);
+    }
+
+    send(testSock, "Hello, World!", strlen("Hello, World!"), 0);
+
+    close(testSock);
+    close(serverSock);
     return 0;
 }
