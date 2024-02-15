@@ -61,6 +61,10 @@
     "libc-header-start.h": "c",
     "features.h": "c",
     "stubs.h": "c",
-    "stdio.h": "c"
+    "stdio.h": "c",
+    "socket.h": "c"
+  },
+  "files.exclude": {
+      "README.md": true,
   }
 }
