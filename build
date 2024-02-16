@@ -1,4 +1,4 @@
 #!/bin/bash
 
-gcc -g server.c -o ./outputFiles/server.o
-gcc -g client.c -o ./outputFiles/client.o
+gcc -g ./source/server.c -o ./outputFiles/server.o
+gcc -g ./source/client.c -o ./outputFiles/client.o
