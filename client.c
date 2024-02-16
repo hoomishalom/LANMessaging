@@ -1,48 +1,40 @@
-#include <arpa/inet.h>
-#include <stdio.h>
 #include <string.h>
-#include <sys/socket.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
-#define PORT 8080
- 
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+const int PORT = 5678;
+const char* ADDR = "127.0.0.1";
+
 int main(int argc, char const* argv[])
-{
-    int status, valread, client_fd;
-    struct sockaddr_in serv_addr;
-    char* hello = "Hello from client";
-    char buffer[1024] = { 0 };
-    if ((client_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        printf("\n Socket creation error \n");
-        return -1;
+{  
+    int clientSock;
+    int status;
+    struct sockaddr_in serverAddr;
+
+    if ((clientSock = socket(AF_INET, SOCK_STREAM, 0)) == -1) 
+    {
+        fprintf(stderr, "socket() failed\n");
+        exit(EXIT_FAILURE);
     }
- 
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(PORT);
- 
-    // Convert IPv4 and IPv6 addresses from text to binary
-    // form
-    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr)
-        <= 0) {
-        printf(
-            "\nInvalid address/ Address not supported \n");
-        return -1;
+
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(PORT);
+
+    if ((inet_pton(AF_INET, ADDR, &serverAddr.sin_addr)) <= 0)
+    {
+        fprintf(stderr, "inet_pton() failed\n");
+        exit(EXIT_FAILURE);
     }
- 
-    if ((status
-         = connect(client_fd, (struct sockaddr*)&serv_addr,
-                   sizeof(serv_addr)))
-        < 0) {
-        printf("\nConnection Failed \n");
-        return -1;
+
+    if ((status = connect(clientSock, (struct sockaddr *)&serverAddr, sizeof(serverAddr))))
+    {
+        fprintf(stderr, "connect() failed\n");
+        exit(EXIT_FAILURE);
     }
-    send(client_fd, hello, strlen(hello), 0);
-    printf("Hello message sent\n");
-    valread = read(client_fd, buffer,
-                   1024 - 1); // subtract 1 for the null
-                              // terminator at the end
-    printf("%s\n", buffer);
- 
-    // closing the connected socket
-    close(client_fd);
-    return 0;
+
+    
 }

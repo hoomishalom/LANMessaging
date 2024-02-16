@@ -15,6 +15,7 @@ int main()
     int serverSock;
     int testSock;
     struct sockaddr_in address;
+    socklen_t addrlen = sizeof(address);
 
     if ((serverSock = socket(AF_INET, SOCK_STREAM, 0)) == -1) 
     {
@@ -22,7 +23,7 @@ int main()
         exit(EXIT_FAILURE);
     }
 
-    if (setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option)))
+    if ((setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option))) == -1)
     {
         fprintf(stderr, "setsockopt() failed\n");
         exit(EXIT_FAILURE);
@@ -36,25 +37,23 @@ int main()
         exit(EXIT_FAILURE);
     }
 
-    if (bind(serverSock, (struct sockaddr*)&address, sizeof(address)) == -1) 
+    if ((bind(serverSock, (struct sockaddr*)&address, sizeof(address))) == -1) 
     {
         fprintf(stderr, "bind() failed\n");
         exit(EXIT_FAILURE);
     }
 
-    if (listen(serverSock, 10) == -1) 
+    if ((listen(serverSock, 10)) == -1) 
     {
         fprintf(stderr, "listen() failed\n");
         exit(EXIT_FAILURE);
     }
 
-    if (testSock = accept(serverSock, (struct sockaddr*)&address, sizeof(address)) == -1)
+    if ((testSock = accept(serverSock, (struct sockaddr*)&address, &addrlen))== -1)
     {
         fprintf(stderr, "accept() failed\n");
         exit(EXIT_FAILURE);
     }
-
-    send(testSock, "Hello, World!", strlen("Hello, World!"), 0);
 
     close(testSock);
     close(serverSock);
