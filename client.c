@@ -5,6 +5,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <errno.h>
+
+extern int errono;
 
 const int PORT = 5678;
 const char* ADDR = "127.0.0.1";
@@ -30,11 +33,11 @@ int main(int argc, char const* argv[])
         exit(EXIT_FAILURE);
     }
 
-    if ((status = connect(clientSock, (struct sockaddr *)&serverAddr, sizeof(serverAddr))))
+    if ((status = connect(clientSock, (struct sockaddr *)&serverAddr, sizeof(serverAddr))) == -1)
     {
         fprintf(stderr, "connect() failed\n");
         exit(EXIT_FAILURE);
     }
 
-    
+    close(clientSock);
 }
