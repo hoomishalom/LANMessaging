@@ -39,5 +39,6 @@ int main(int argc, char const* argv[])
         exit(EXIT_FAILURE);
     }
 
+    printf("connected to server\n");
     close(clientSock);
 }

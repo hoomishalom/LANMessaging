@@ -31,11 +31,24 @@ int BACKLOG = 32;
 
 const int messageBufferLen = 1024;
 
-//functions initialization
+typedef struct {
+    char *cmd;
+    char *data;
+} readMessageStruct;
+
+typedef struct {
+    int destination;
+    char *cmd;
+    char *data;
+} sendMessageStruct;
+
+// functions initialization
 void createServerSocket();
+readMessageStruct parseReadMessage(char message[messageBufferLen]);
 int handleNewSocket();
 void handleQuitReqeust();
 void handleIncomingRequest(int sock);
+void handleDebugTerminalInput(char terminalInputBuffer);
 
 void createServerSocket()
 {
@@ -72,6 +85,26 @@ void createServerSocket()
     }
 }
 
+readMessageStruct parseReadMessage(char message[messageBufferLen]) {
+    readMessageStruct messageObj;
+
+    strcpy(messageObj.cmd, strtok(message, ARGS_DELIMITER));
+    strcpy(messageObj.data, strtok(message, ARGS_DELIMITER));
+
+    return messageObj;
+}
+
+sendMessageStruct encodeSendMessage(int destination, char *cmd, char *data)
+{
+    sendMessageStruct messageObj;
+
+    messageObj.destination = destination;
+    strcpy(messageObj.cmd, cmd);
+    strcpy(messageObj.data, data);
+
+    return messageObj;
+}
+
 int handleNewSocket() {
     int clientSock;
 
@@ -84,10 +117,11 @@ int handleNewSocket() {
     return clientSock;
 }
 
-void handleQuitReqeust()
+void handleQuitReqeust(int sock)
 {
-
-    return;
+    FD_CLR(sock, &connectedSockets);
+    printf("sock: %d dissconnected\n", sock);
+    close(sock);
 }
 
 void handleIncomingRequest(int sock)
@@ -105,37 +139,82 @@ void handleIncomingRequest(int sock)
         exit(EXIT_FAILURE);
     }
     
-    memcpy(tempBuffer, messageBuffer, messageBufferLen);
-    cmd = strtok(tempBuffer, DATA_DELIMITER);
 
     if (strcmp(cmd, "quit"))
     {
-        handleQuitReqeust();
+        handleQuitReqeust(sock);
     } else 
     {
         fprintf(stderr, "handleIncomingRequest - unknown command\n");
         exit(EXIT_FAILURE);
     }
-
-    return;
 }
 
+void handleDebugTerminalInput(char terminalInput)
+{
+    if (terminalInput == 'd')
+    {
+        int i;
+        int counter = 0;
+
+        for (i = 0; i < FD_SETSIZE; ++i)
+        {
+            if (FD_ISSET(i, &connectedSockets) != 0)
+            {
+                ++counter;
+                printf("socket num: %d is: %d\n", counter, i);
+            }
+        }
+        
+    } else if(terminalInput == 'q')
+    {
+        printf("quitting\n");
+        close(serverSock);
+        exit(EXIT_SUCCESS);
+    }
+    else
+    {
+        fprintf(stderr, "handleDebugTerminalInput - unknown command [%c]\n", terminalInput);
+    }
+}
 
 int main()
 {
     createServerSocket();
 
+    fd_set terminalInput;
+    fd_set readyTerminalInput;
+
+    char terminalInputBuffer;
+
+    FD_ZERO(&terminalInput);
+    FD_SET(0, &terminalInput);  // stdin - 0
+
     FD_ZERO(&connectedSockets);
     FD_SET(serverSock, &connectedSockets);
+
 
     printf("fd_setzize: %d\n", FD_SETSIZE);
     while (true)
     {
         readyToReadSockets = connectedSockets;
+        readyTerminalInput = terminalInput;
 
-        if ((select(FD_SETSIZE, &readyToReadSockets, NULL, NULL, NULL)) == -1)
+        // if ((select(1, &readyTerminalInput, NULL, NULL, NULL)) == -1)               // check readinnes of terminal input
+        // {
+        //     fprintf(stderr, "main - select() [terminal] failed errno: %d\n", errno);
+        //     exit(EXIT_FAILURE);
+        // } 
+
+        // if (FD_ISSET(0, &readyTerminalInput))
+        // {   
+        //     terminalInputBuffer = fgetc(stdin);
+        //     handleDebugTerminalInput(terminalInputBuffer);
+        // }
+
+        if ((select(FD_SETSIZE, &readyToReadSockets, NULL, NULL, NULL)) == -1)      // check readinnes of sockets
         {
-            fprintf(stderr, "select() failed errno: %d\n", errno);
+            fprintf(stderr, "main - select() [sockets] failed errno: %d\n", errno);
             exit(EXIT_FAILURE);
         }
         
@@ -144,7 +223,7 @@ int main()
         {
             if (FD_ISSET(i, &readyToReadSockets))
             {
-                if (i == serverSock)
+                if (i == serverSock)        // new connection
                 {
                     int clientSock = handleNewSocket();
                     FD_SET(clientSock, &connectedSockets);
