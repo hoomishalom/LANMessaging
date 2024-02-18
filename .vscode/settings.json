@@ -62,7 +62,8 @@
     "features.h": "c",
     "stubs.h": "c",
     "stdio.h": "c",
-    "socket.h": "c"
+    "socket.h": "c",
+    "in.h": "c"
   },
   "files.exclude": {
       "README.md": true,

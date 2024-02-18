@@ -6,21 +6,26 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <stdbool.h>
 
 extern int errono;
 
 const int PORT = 5678;
 const char* ADDR = "127.0.0.1";
 
-int main(int argc, char const* argv[])
-{  
-    int clientSock;
-    int status;
-    struct sockaddr_in serverAddr;
+int clientSock;
+struct sockaddr_in serverAddr;
 
-    if ((clientSock = socket(AF_INET, SOCK_STREAM, 0)) == -1) 
+// functions initialization
+int createAndConnectSocket();
+
+int createAndConnectSocket()
+{
+    int clientSock;
+
+    if ((clientSock = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
-        fprintf(stderr, "socket() failed\n");
+        fprintf(stderr, "createAndConnectSocket - socket() failed errno: %d\n", errno);
         exit(EXIT_FAILURE);
     }
 
@@ -29,16 +34,22 @@ int main(int argc, char const* argv[])
 
     if ((inet_pton(AF_INET, ADDR, &serverAddr.sin_addr)) <= 0)
     {
-        fprintf(stderr, "inet_pton() failed\n");
+        fprintf(stderr, "createAndConnectSocket - inet_pton() failed errno: %d\n", errno);
         exit(EXIT_FAILURE);
     }
 
-    if ((status = connect(clientSock, (struct sockaddr *)&serverAddr, sizeof(serverAddr))) == -1)
+    if ((connect(clientSock, (struct sockaddr *)&serverAddr, sizeof(serverAddr))) == -1)
     {
-        fprintf(stderr, "connect() failed\n");
+        fprintf(stderr, "createAndConnectSocket - connect() failed errno: %d\n", errno);
         exit(EXIT_FAILURE);
     }
+}
+
+int main(int argc, char const* argv[])
+{  
+    clientSock = createAndConnectSocket();
 
     printf("connected to server\n");
+    while(true){}
     close(clientSock);
 }

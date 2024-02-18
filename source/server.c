@@ -8,6 +8,12 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <time.h>
+
+#define TERMINAL_DBG 0
+
+#define stdlog stdout   // logging messages go to "stdlog"
+#define stddbg stdout   // debugging messages go to "stdlog"
 
 extern int errono;
 
@@ -48,7 +54,7 @@ readMessageStruct parseReadMessage(char message[messageBufferLen]);
 int handleNewSocket();
 void handleQuitReqeust();
 void handleIncomingRequest(int sock);
-void handleDebugTerminalInput(char terminalInputBuffer);
+void handleDebugTerminalInput(char terminalInputBuffer[2]);
 
 void createServerSocket()
 {
@@ -114,13 +120,15 @@ int handleNewSocket() {
         exit(EXIT_FAILURE);
     }
 
+    fprintf(stdlog, "New connection from {ip: %s, port: %d, sock: %d}\n", inet_ntoa(serverAddr.sin_addr), serverAddr.sin_port, clientSock);
+
     return clientSock;
 }
 
 void handleQuitReqeust(int sock)
 {
     FD_CLR(sock, &connectedSockets);
-    printf("sock: %d dissconnected\n", sock);
+    fprintf(stdlog, "Dissconected sock: %d\n", sock);
     close(sock);
 }
 
@@ -138,37 +146,35 @@ void handleIncomingRequest(int sock)
         fprintf(stderr, "handleIncomingRequest - read() failed errno: %d\n", errno);
         exit(EXIT_FAILURE);
     }
-    
 
-    if (strcmp(cmd, "quit"))
+    if (strlen(messageBuffer) == 0)         // handle client crash
     {
         handleQuitReqeust(sock);
-    } else 
-    {
-        fprintf(stderr, "handleIncomingRequest - unknown command\n");
-        exit(EXIT_FAILURE);
     }
 }
 
-void handleDebugTerminalInput(char terminalInput)
+void handleDebugTerminalInput(char terminalInput[2])
 {
-    if (terminalInput == 'd')
-    {
+    fprintf(stddbg, "\n\nTEST TESTSETSETS \n\n");
+    if (strcmp(terminalInput, "d") == 0)
+    {   
         int i;
         int counter = 0;
 
+        fprintf(stddbg, "Listing All Connected Sockets:\n");
         for (i = 0; i < FD_SETSIZE; ++i)
-        {
+        {   
             if (FD_ISSET(i, &connectedSockets) != 0)
             {
                 ++counter;
-                printf("socket num: %d is: %d\n", counter, i);
+                fprintf(stddbg, "\tsocket num: %d is: %d\n", counter, i);
             }
         }
+        fprintf(stddbg, "End Listing\n");
         
-    } else if(terminalInput == 'q')
+    } else if(strcmp(terminalInput,"q") == 0)
     {
-        printf("quitting\n");
+        fprintf(stdlog, "quitting\n");
         close(serverSock);
         exit(EXIT_SUCCESS);
     }
@@ -194,30 +200,34 @@ int main()
     FD_SET(serverSock, &connectedSockets);
 
 
-    printf("fd_setzize: %d\n", FD_SETSIZE);
     while (true)
     {
         readyToReadSockets = connectedSockets;
         readyTerminalInput = terminalInput;
+        
+        if (TERMINAL_DBG)
+        {
+            if ((select(1, &readyTerminalInput, NULL, NULL, NULL)) == -1)               // check readinnes of terminal input
+            {
+                fprintf(stderr, "main - select() [terminal] failed errno: %d\n", errno);
+                exit(EXIT_FAILURE);
+            } 
 
-        // if ((select(1, &readyTerminalInput, NULL, NULL, NULL)) == -1)               // check readinnes of terminal input
-        // {
-        //     fprintf(stderr, "main - select() [terminal] failed errno: %d\n", errno);
-        //     exit(EXIT_FAILURE);
-        // } 
+            if (FD_ISSET(0, &readyTerminalInput))
+            {
+                char terminalInputBuffer[2];
+                fgets(terminalInputBuffer, sizeof(terminalInputBuffer), stdin);
+                handleDebugTerminalInput(terminalInputBuffer);
+            }
 
-        // if (FD_ISSET(0, &readyTerminalInput))
-        // {   
-        //     terminalInputBuffer = fgetc(stdin);
-        //     handleDebugTerminalInput(terminalInputBuffer);
-        // }
-
+        }
+        
         if ((select(FD_SETSIZE, &readyToReadSockets, NULL, NULL, NULL)) == -1)      // check readinnes of sockets
         {
             fprintf(stderr, "main - select() [sockets] failed errno: %d\n", errno);
             exit(EXIT_FAILURE);
         }
-        
+
         int i;
         for (i = 0; i < FD_SETSIZE; ++i)
         {
