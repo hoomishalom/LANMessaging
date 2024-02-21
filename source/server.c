@@ -15,6 +15,12 @@
 #define stdlog stdout   // logging messages go to "stdlog"
 #define stddbg stdout   // debugging messages go to "stdlog"
 
+#define maxCmdLen 256
+#define maxDataLen 2048
+#define maxMessageLen maxCmdLen + maxDataLen
+
+#define maxMessageQueued 256
+
 extern int errono;
 
 const int PORT = 5678;
@@ -35,8 +41,6 @@ socklen_t serverAddrLen = sizeof(serverAddr);
 int option = 1;
 int BACKLOG = 32;
 
-const int messageBufferLen = 1024;
-
 typedef struct {
     char *cmd;
     char *data;
@@ -48,14 +52,18 @@ typedef struct {
     char *data;
 } sendMessageStruct;
 
+sendMessageStruct messagesToSend[maxMessageQueued];
+
 // functions initialization
 void createServerSocket();
-readMessageStruct parseReadMessage(char message[messageBufferLen]);
+readMessageStruct parseReadMessage(char message[maxMessageLen]);
+sendMessageStruct encodeSendMessage(int destination, char *cmd, char *data);
 int handleNewSocket();
 void handleQuitReqeust();
 void handleIncomingRequest(int sock);
 void clearDebugTerminalInput();
 void handleDebugTerminalInput(char terminalInputBuffer[2]);
+void sendMessageToClient(int sock, char *cmd, char *data);
 
 void createServerSocket()
 {
@@ -92,7 +100,7 @@ void createServerSocket()
     }
 }
 
-readMessageStruct parseReadMessage(char message[messageBufferLen]) {
+readMessageStruct parseReadMessage(char message[maxMessageLen]) {
     readMessageStruct messageObj;
 
     strcpy(messageObj.cmd, strtok(message, ARGS_DELIMITER));
@@ -135,14 +143,16 @@ void handleQuitReqeust(int sock)
 
 void handleIncomingRequest(int sock)
 {
-    char messageBuffer[messageBufferLen];
-    char tempBuffer[messageBufferLen];
+    char messageBuffer[maxMessageLen];
+    char tempBuffer[maxMessageLen];
     char *cmd;
     int readBytes;
 
-    bzero(messageBuffer, messageBufferLen);
+    readMessageStruct messageObj;
 
-    if ((readBytes = read(sock, messageBuffer, messageBufferLen)) == -1)
+    bzero(messageBuffer, maxMessageLen);
+
+    if ((readBytes = read(sock, messageBuffer, maxMessageLen)) == -1)
     {
         fprintf(stderr, "handleIncomingRequest - read() failed errno: %d\n", errno);
         exit(EXIT_FAILURE);
@@ -151,6 +161,16 @@ void handleIncomingRequest(int sock)
     if (strlen(messageBuffer) == 0)         // handle client crash
     {
         handleQuitReqeust(sock);
+        return;
+    }
+
+    messageObj = parseReadMessage(messageBuffer);
+    
+    if (strcmp(messageObj.cmd, "quit") == 0) {
+        handleQuitReqeust(sock);
+    } else 
+    {
+        fprintf(stdlog, "handleIncomingRequest - messageObj.cmd: %s, isn't known\n", messageObj.cmd);
     }
 }
 
@@ -191,6 +211,11 @@ void handleDebugTerminalInput(char terminalInput[2])
     clearDebugTerminalInput();
 }
 
+void sendMessageToClient(int sock, char *cmd, char *data)
+{
+
+}
+
 int main()
 {
     createServerSocket();
@@ -215,14 +240,15 @@ int main()
             exit(EXIT_FAILURE);
         }
 
-        for (int i = 0; i < FD_SETSIZE; ++i)
+        if (TERMINAL_DBG && FD_ISSET(0, &readyToReadFileDescriptors))   // debugg
         {   
-            if (TERMINAL_DBG && FD_ISSET(0, &readyToReadFileDescriptors))   // debugg
-            {   
-                char terminalInputBuffer[2];
-                fgets(terminalInputBuffer, sizeof(terminalInputBuffer), stdin);
-                handleDebugTerminalInput(terminalInputBuffer);
-            }
+            char terminalInputBuffer[2];
+            fgets(terminalInputBuffer, sizeof(terminalInputBuffer), stdin);
+            handleDebugTerminalInput(terminalInputBuffer);
+        }
+
+        for (int i = 1; i < FD_SETSIZE; ++i)
+        {   
 
             if (FD_ISSET(i, &readyToReadFileDescriptors))
             {
