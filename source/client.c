@@ -8,16 +8,60 @@
 #include <errno.h>
 #include <stdbool.h>
 
+#define maxCmdLen 256
+#define maxDataLen 2048
+#define maxMessageLen maxCmdLen + maxDataLen
+
+#define maxMessageQueued 256
+
 extern int errono;
 
 const int PORT = 5678;
 const char* ADDR = "127.0.0.1";
 
+const char* DATA_DELIMITER = "~";
+const char* ARGS_DELIMITER = "|";
+
 int clientSock;
 struct sockaddr_in serverAddr;
 
+typedef struct {
+    char *cmd;
+    char *data;
+} readMessageStruct;
+
+typedef struct {
+    int destination;
+    char *cmd;
+    char *data;
+} sendMessageStruct;
+
+sendMessageStruct messagesToSend[maxMessageQueued];
+
 // functions initialization
+readMessageStruct parseReadMessage(char message[maxMessageLen]);
+sendMessageStruct encodeSendMessage(int destination, char *cmd, char *data);
 int createAndConnectSocket();
+
+readMessageStruct parseReadMessage(char message[maxMessageLen]) {
+    readMessageStruct messageObj;
+
+    strcpy(messageObj.cmd, strtok(message, ARGS_DELIMITER));
+    strcpy(messageObj.data, strtok(message, ARGS_DELIMITER));
+
+    return messageObj;
+}
+
+sendMessageStruct encodeSendMessage(int destination, char *cmd, char *data)
+{
+    sendMessageStruct messageObj;
+
+    messageObj.destination = destination;
+    strcpy(messageObj.cmd, cmd);
+    strcpy(messageObj.data, data);
+
+    return messageObj;
+}
 
 int createAndConnectSocket()
 {
