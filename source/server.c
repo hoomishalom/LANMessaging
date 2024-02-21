@@ -10,7 +10,7 @@
 #include <arpa/inet.h>
 #include <time.h>
 
-#define TERMINAL_DBG 0
+#define TERMINAL_DBG 1
 
 #define stdlog stdout   // logging messages go to "stdlog"
 #define stddbg stdout   // debugging messages go to "stdlog"
@@ -23,10 +23,10 @@ const char* ADDR = "127.0.0.1";
 const char* DATA_DELIMITER = "~";
 const char* ARGS_DELIMITER = "|";
 
-fd_set connectedSockets;
-fd_set readyToReadSockets;
-fd_set readyToWriteSockets;
-fd_set errorSockets;
+fd_set connectedFileDescriptors;
+fd_set readyToReadFileDescriptors;
+fd_set readyToWriteFileDescriptors;
+fd_set errorFileDescriptors;
 
 int serverSock;
 struct sockaddr_in serverAddr;
@@ -54,6 +54,7 @@ readMessageStruct parseReadMessage(char message[messageBufferLen]);
 int handleNewSocket();
 void handleQuitReqeust();
 void handleIncomingRequest(int sock);
+void clearDebugTerminalInput();
 void handleDebugTerminalInput(char terminalInputBuffer[2]);
 
 void createServerSocket()
@@ -127,7 +128,7 @@ int handleNewSocket() {
 
 void handleQuitReqeust(int sock)
 {
-    FD_CLR(sock, &connectedSockets);
+    FD_CLR(sock, &connectedFileDescriptors);
     fprintf(stdlog, "Dissconected sock: %d\n", sock);
     close(sock);
 }
@@ -153,24 +154,29 @@ void handleIncomingRequest(int sock)
     }
 }
 
+void clearDebugTerminalInput()
+{
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
+}
+
 void handleDebugTerminalInput(char terminalInput[2])
 {
-    fprintf(stddbg, "\n\nTEST TESTSETSETS \n\n");
     if (strcmp(terminalInput, "d") == 0)
     {   
         int i;
         int counter = 0;
 
-        fprintf(stddbg, "Listing All Connected Sockets:\n");
+        printf("\n");
         for (i = 0; i < FD_SETSIZE; ++i)
         {   
-            if (FD_ISSET(i, &connectedSockets) != 0)
+            if (FD_ISSET(i, &connectedFileDescriptors) != 0)
             {
                 ++counter;
                 fprintf(stddbg, "\tsocket num: %d is: %d\n", counter, i);
             }
         }
-        fprintf(stddbg, "End Listing\n");
+        printf("\n");
         
     } else if(strcmp(terminalInput,"q") == 0)
     {
@@ -179,9 +185,10 @@ void handleDebugTerminalInput(char terminalInput[2])
         exit(EXIT_SUCCESS);
     }
     else
-    {
-        fprintf(stderr, "handleDebugTerminalInput - unknown command [%c]\n", terminalInput);
+    {   
+        fprintf(stderr, "handleDebugTerminalInput - unknown command [%s]\n", terminalInput);
     }
+    clearDebugTerminalInput();
 }
 
 int main()
@@ -193,50 +200,36 @@ int main()
 
     char terminalInputBuffer;
 
-    FD_ZERO(&terminalInput);
-    FD_SET(0, &terminalInput);  // stdin - 0
-
-    FD_ZERO(&connectedSockets);
-    FD_SET(serverSock, &connectedSockets);
+    FD_ZERO(&connectedFileDescriptors);
+    FD_SET(serverSock, &connectedFileDescriptors);
+    FD_SET(0, &connectedFileDescriptors);  // stdin - 0
 
 
     while (true)
     {
-        readyToReadSockets = connectedSockets;
-        readyTerminalInput = terminalInput;
-        
-        if (TERMINAL_DBG)
-        {
-            if ((select(1, &readyTerminalInput, NULL, NULL, NULL)) == -1)               // check readinnes of terminal input
-            {
-                fprintf(stderr, "main - select() [terminal] failed errno: %d\n", errno);
-                exit(EXIT_FAILURE);
-            } 
+        readyToReadFileDescriptors = connectedFileDescriptors;
 
-            if (FD_ISSET(0, &readyTerminalInput))
-            {
-                char terminalInputBuffer[2];
-                fgets(terminalInputBuffer, sizeof(terminalInputBuffer), stdin);
-                handleDebugTerminalInput(terminalInputBuffer);
-            }
-
-        }
-        
-        if ((select(FD_SETSIZE, &readyToReadSockets, NULL, NULL, NULL)) == -1)      // check readinnes of sockets
+        if ((select(FD_SETSIZE, &readyToReadFileDescriptors, NULL, NULL, NULL)) == -1)      // check readinnes of sockets
         {
             fprintf(stderr, "main - select() [sockets] failed errno: %d\n", errno);
             exit(EXIT_FAILURE);
         }
 
-        int i;
-        for (i = 0; i < FD_SETSIZE; ++i)
-        {
-            if (FD_ISSET(i, &readyToReadSockets))
+        for (int i = 0; i < FD_SETSIZE; ++i)
+        {   
+            if (TERMINAL_DBG && FD_ISSET(0, &readyToReadFileDescriptors))   // debugg
+            {   
+                char terminalInputBuffer[2];
+                fgets(terminalInputBuffer, sizeof(terminalInputBuffer), stdin);
+                handleDebugTerminalInput(terminalInputBuffer);
+            }
+
+            if (FD_ISSET(i, &readyToReadFileDescriptors))
             {
                 if (i == serverSock)        // new connection
                 {
                     int clientSock = handleNewSocket();
-                    FD_SET(clientSock, &connectedSockets);
+                    FD_SET(clientSock, &connectedFileDescriptors);
                 } else
                 {
                     handleIncomingRequest(i);
