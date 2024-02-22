@@ -42,14 +42,14 @@ int option = 1;
 int BACKLOG = 32;
 
 typedef struct {
-    char *cmd;
-    char *data;
+    char cmd[maxCmdLen];
+    char data[maxDataLen];
 } readMessageStruct;
 
 typedef struct {
     int destination;
-    char *cmd;
-    char *data;
+    char cmd[maxCmdLen];
+    char data[maxDataLen];
 } sendMessageStruct;
 
 sendMessageStruct messagesToSend[maxMessageQueued];
@@ -78,7 +78,7 @@ void createServerSocket()
         fprintf(stderr, "createServerSocket - setsockopt() failed errno: %d\n", errno);
         exit(EXIT_FAILURE);
     }
-
+    
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(PORT);
     if (inet_aton(ADDR, &serverAddr.sin_addr) == 0)    // sets serverAddr.sin_addr.s_addr
@@ -104,7 +104,7 @@ readMessageStruct parseReadMessage(char message[maxMessageLen]) {
     readMessageStruct messageObj;
 
     strcpy(messageObj.cmd, strtok(message, ARGS_DELIMITER));
-    strcpy(messageObj.data, strtok(message, ARGS_DELIMITER));
+    strcpy(messageObj.data, strtok(NULL, ARGS_DELIMITER));
 
     return messageObj;
 }
@@ -168,10 +168,13 @@ void handleIncomingRequest(int sock)
     
     if (strcmp(messageObj.cmd, "quit") == 0) {
         handleQuitReqeust(sock);
-    } else 
+    } else if (strcmp(messageObj.cmd, "test") == 0) {
+        printf("%s\n", messageObj.data);
+    } else
     {
         fprintf(stdlog, "handleIncomingRequest - messageObj.cmd: %s, isn't known\n", messageObj.cmd);
     }
+
 }
 
 void clearDebugTerminalInput()
@@ -260,7 +263,7 @@ int main()
                 {
                     handleIncomingRequest(i);
                 }
-            }   // addd write and error handling here
+            }   // add write and error handling here
         }
     }
 

@@ -16,24 +16,28 @@
 
 extern int errono;
 
+int clientSock; 
+
 const int PORT = 5678;
 const char* ADDR = "127.0.0.1";
 
 const char* DATA_DELIMITER = "~";
 const char* ARGS_DELIMITER = "|";
 
+int option = 1;
+
 int clientSock;
 struct sockaddr_in serverAddr;
 
 typedef struct {
-    char *cmd;
-    char *data;
+    char cmd[maxCmdLen];
+    char data[maxDataLen];
 } readMessageStruct;
 
 typedef struct {
     int destination;
-    char *cmd;
-    char *data;
+    char cmd[maxCmdLen];
+    char data[maxDataLen];
 } sendMessageStruct;
 
 sendMessageStruct messagesToSend[maxMessageQueued];
@@ -42,6 +46,20 @@ sendMessageStruct messagesToSend[maxMessageQueued];
 readMessageStruct parseReadMessage(char message[maxMessageLen]);
 sendMessageStruct encodeSendMessage(int destination, char *cmd, char *data);
 int createAndConnectSocket();
+
+int isSocketConnected(int sockfd) { 
+    int error; 
+    socklen_t len = sizeof(error); 
+    int ret = getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &error, &len); 
+     
+    if (ret == 0 && error == 0) { 
+        // Socket is connected 
+        return 1; 
+    } else { 
+        // Socket is not connected 
+        return 0; 
+    } 
+} 
 
 readMessageStruct parseReadMessage(char message[maxMessageLen]) {
     readMessageStruct messageObj;
@@ -65,17 +83,22 @@ sendMessageStruct encodeSendMessage(int destination, char *cmd, char *data)
 
 int createAndConnectSocket()
 {
-    int clientSock;
-
     if ((clientSock = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
         fprintf(stderr, "createAndConnectSocket - socket() failed errno: %d\n", errno);
         exit(EXIT_FAILURE);
     }
 
+    if ((setsockopt(clientSock, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option))) == -1)
+    {
+        fprintf(stderr, "createAndConnectSocket - setsockopt() failed errno: %d\n", errno);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("%d\n", isSocketConnected(clientSock));
+
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(PORT);
-
     if ((inet_pton(AF_INET, ADDR, &serverAddr.sin_addr)) <= 0)
     {
         fprintf(stderr, "createAndConnectSocket - inet_pton() failed errno: %d\n", errno);
@@ -91,9 +114,14 @@ int createAndConnectSocket()
 
 int main(int argc, char const* argv[])
 {  
-    clientSock = createAndConnectSocket();
+    createAndConnectSocket();
 
     printf("connected to server\n");
-    while(true){}
+    while(true){
+        sleep(2);
+        char test[maxMessageLen] = "test|this is a test";
+        printf("send: %d\n", send(clientSock, test, strlen(test), 0));
+    }
+
     close(clientSock);
 }
