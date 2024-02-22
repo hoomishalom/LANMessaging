@@ -46,20 +46,14 @@ typedef struct {
     char data[maxDataLen];
 } readMessageStruct;
 
-typedef struct {
-    int destination;
-    char cmd[maxCmdLen];
-    char data[maxDataLen];
-} sendMessageStruct;
-
-sendMessageStruct messagesToSend[maxMessageQueued];
+char messagesToSend[maxMessageQueued][maxMessageLen];
 
 // functions initialization
 void createServerSocket();
 readMessageStruct parseReadMessage(char message[maxMessageLen]);
-sendMessageStruct encodeSendMessage(int destination, char *cmd, char *data);
 int handleNewSocket();
 void handleQuitReqeust();
+void handleLoginRequest(int sock,readMessageStruct messageObj);
 void handleIncomingRequest(int sock);
 void clearDebugTerminalInput();
 void handleDebugTerminalInput(char terminalInputBuffer[2]);
@@ -109,17 +103,6 @@ readMessageStruct parseReadMessage(char message[maxMessageLen]) {
     return messageObj;
 }
 
-sendMessageStruct encodeSendMessage(int destination, char *cmd, char *data)
-{
-    sendMessageStruct messageObj;
-
-    messageObj.destination = destination;
-    strcpy(messageObj.cmd, cmd);
-    strcpy(messageObj.data, data);
-
-    return messageObj;
-}
-
 int handleNewSocket() {
     int clientSock;
 
@@ -139,6 +122,11 @@ void handleQuitReqeust(int sock)
     FD_CLR(sock, &connectedFileDescriptors);
     fprintf(stdlog, "Dissconected sock: %d\n", sock);
     close(sock);
+}
+
+void handleLoginRequest(int sock,readMessageStruct messageObj)
+{
+    
 }
 
 void handleIncomingRequest(int sock)
@@ -168,9 +156,10 @@ void handleIncomingRequest(int sock)
     
     if (strcmp(messageObj.cmd, "quit") == 0) {
         handleQuitReqeust(sock);
-    } else if (strcmp(messageObj.cmd, "test") == 0) {
-        printf("%s\n", messageObj.data);
-    } else
+    } else if (strcmp(messageObj.cmd, "login") == 0) {
+        handleLoginRequest(sock, messageObj);
+    }
+    else
     {
         fprintf(stdlog, "handleIncomingRequest - messageObj.cmd: %s, isn't known\n", messageObj.cmd);
     }
@@ -236,6 +225,7 @@ int main()
     while (true)
     {
         readyToReadFileDescriptors = connectedFileDescriptors;
+        readyToWriteFileDescriptors = connectedFileDescriptors;
 
         if ((select(FD_SETSIZE, &readyToReadFileDescriptors, NULL, NULL, NULL)) == -1)      // check readinnes of sockets
         {
@@ -263,7 +253,9 @@ int main()
                 {
                     handleIncomingRequest(i);
                 }
-            }   // add write and error handling here
+            } else if (FD_ISSET(i, &readyToWriteFileDescriptors))
+            {
+            }
         }
     }
 

@@ -34,18 +34,11 @@ typedef struct {
     char data[maxDataLen];
 } readMessageStruct;
 
-typedef struct {
-    int destination;
-    char cmd[maxCmdLen];
-    char data[maxDataLen];
-} sendMessageStruct;
-
-sendMessageStruct messagesToSend[maxMessageQueued];
-
 // functions initialization
 readMessageStruct parseReadMessage(char message[maxMessageLen]);
-sendMessageStruct encodeSendMessage(int destination, char *cmd, char *data);
 int createAndConnectSocket();
+void sendMessage(int sock, char cmd[maxCmdLen], char data[maxDataLen]);
+void sendSelfInfo();
 
 int isSocketConnected(int sockfd) { 
     int error; 
@@ -66,17 +59,6 @@ readMessageStruct parseReadMessage(char message[maxMessageLen]) {
 
     strcpy(messageObj.cmd, strtok(message, ARGS_DELIMITER));
     strcpy(messageObj.data, strtok(message, ARGS_DELIMITER));
-
-    return messageObj;
-}
-
-sendMessageStruct encodeSendMessage(int destination, char *cmd, char *data)
-{
-    sendMessageStruct messageObj;
-
-    messageObj.destination = destination;
-    strcpy(messageObj.cmd, cmd);
-    strcpy(messageObj.data, data);
 
     return messageObj;
 }
@@ -112,15 +94,38 @@ int createAndConnectSocket()
     }
 }
 
-int main(int argc, char const* argv[])
-{  
-    createAndConnectSocket();
+void sendMessage(int sock, char cmd[maxCmdLen], char data[maxDataLen])
+{
+    char message[maxMessageLen];
 
+    strcat(message, cmd);
+    strcat(message, ARGS_DELIMITER);
+    strcat(message, data);
+
+    send(sock, message, sizeof(message), 0);
+}
+
+void sendSelfInfo()
+{
+    char cmd[maxCmdLen];
+    char data[maxDataLen];
+
+    strcpy(cmd, "login");
+}
+
+int main(int argc, char const* argv[])
+{
+    
+    createAndConnectSocket();
+    // sendSelfInfo();
     printf("connected to server\n");
     while(true){
         sleep(2);
-        char test[maxMessageLen] = "test|this is a test";
-        printf("send: %d\n", send(clientSock, test, strlen(test), 0));
+        char test[100] = "test|this is a test";
+
+        strcat(test, argv[1]);
+
+        send(clientSock, test, strlen(test), 0);
     }
 
     close(clientSock);
