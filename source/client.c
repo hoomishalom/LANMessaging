@@ -8,6 +8,9 @@
 #include <errno.h>
 #include <stdbool.h>
 
+#define stdlog stdout   // logging messages go to "stdlog"
+#define stddbg stdout   // debugging messages go to "stdlog"
+
 #define maxCmdLen 256
 #define maxDataLen 2048
 #define maxMessageLen maxCmdLen + maxDataLen
@@ -103,6 +106,8 @@ void sendMessage(int sock, char cmd[maxCmdLen], char data[maxDataLen])
     strcat(message, data);
 
     send(sock, message, sizeof(message), 0);
+
+    fprintf(stdlog, "sendMessage - Message Sent To Server: %s\n", message);
 }
 
 void sendSelfInfo()
@@ -123,7 +128,7 @@ int main(int argc, char const* argv[])
         sleep(2);
         char test[100] = "test|this is a test";
 
-        strcat(test, argv[1]);
+        // strcat(test, argv[1]);
 
         send(clientSock, test, strlen(test), 0);
     }

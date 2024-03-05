@@ -15,9 +15,14 @@
 #define stdlog stdout   // logging messages go to "stdlog"
 #define stddbg stdout   // debugging messages go to "stdlog"
 
+#define maxUsers 16
+
 #define maxCmdLen 256
 #define maxDataLen 2048
 #define maxMessageLen maxCmdLen + maxDataLen
+
+#define maxNameLen 32
+#define maxDescriptionLen 256
 
 #define maxMessageQueued 256
 
@@ -47,6 +52,16 @@ typedef struct {
 } readMessageStruct;
 
 char messagesToSend[maxMessageQueued][maxMessageLen];
+
+typedef struct {
+    int socket;
+    char name[maxNameLen];
+    char description[maxDescriptionLen];
+    char pendingMessages[maxMessageQueued][maxMessageLen];
+} userInfo;
+
+int userCount = 0;
+userInfo *users[maxUsers];
 
 // functions initialization
 void createServerSocket();
@@ -119,6 +134,15 @@ int handleNewSocket() {
 
 void handleQuitReqeust(int sock)
 {
+    for (int i = 0; i < userCount; ++i)
+    {
+        if (users[i]->socket == sock)
+        {
+            free(users[i]);
+            --userCount;
+            break;
+        }
+    }
     FD_CLR(sock, &connectedFileDescriptors);
     fprintf(stdlog, "Dissconected sock: %d\n", sock);
     close(sock);
@@ -126,7 +150,13 @@ void handleQuitReqeust(int sock)
 
 void handleLoginRequest(int sock,readMessageStruct messageObj)
 {
-    
+    userInfo *user = (userInfo *)malloc(sizeof(userInfo));
+    user->socket = sock;
+
+    strcpy(user->name, strtok(messageObj.data, DATA_DELIMITER));
+    strcpy(user->description, strtok(NULL, DATA_DELIMITER));
+
+    users[userCount] = user;
 }
 
 void handleIncomingRequest(int sock)

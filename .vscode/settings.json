@@ -66,6 +66,6 @@
     "in.h": "c"
   },
   "files.exclude": {
-      "README.md": true,
+      "README.md": false,
   }
 }
