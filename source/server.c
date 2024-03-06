@@ -21,10 +21,10 @@
 #define maxDataLen 2048
 #define maxMessageLen maxCmdLen + maxDataLen
 
+#define maxMessageQueued 256
+
 #define maxNameLen 32
 #define maxDescriptionLen 256
-
-#define maxMessageQueued 256
 
 extern int errono;
 
@@ -58,9 +58,10 @@ typedef struct {
     char name[maxNameLen];
     char description[maxDescriptionLen];
     char pendingMessages[maxMessageQueued][maxMessageLen];
+    int pendingMessageCount;
 } userInfo;
 
-int userCount = 0;
+int usercount = 0;
 userInfo *users[maxUsers];
 
 // functions initialization
@@ -134,12 +135,12 @@ int handleNewSocket() {
 
 void handleQuitReqeust(int sock)
 {
-    for (int i = 0; i < userCount; ++i)
+    for (int i = 0; i < usercount; ++i)
     {
         if (users[i]->socket == sock)
         {
             free(users[i]);
-            --userCount;
+            --usercount;
             break;
         }
     }
@@ -156,7 +157,8 @@ void handleLoginRequest(int sock,readMessageStruct messageObj)
     strcpy(user->name, strtok(messageObj.data, DATA_DELIMITER));
     strcpy(user->description, strtok(NULL, DATA_DELIMITER));
 
-    users[userCount] = user;
+    users[usercount] = user;
+    ++usercount;
 }
 
 void handleIncomingRequest(int sock)
@@ -209,20 +211,36 @@ void handleDebugTerminalInput(char terminalInput[2])
         int i;
         int counter = 0;
 
-        printf("\n");
+        fprintf(stddbg, "\n");
         for (i = 0; i < FD_SETSIZE; ++i)
         {   
             if (FD_ISSET(i, &connectedFileDescriptors) != 0)
             {
                 ++counter;
-                fprintf(stddbg, "\tsocket num: %d is: %d\n", counter, i);
+                fprintf(stddbg, "\tSocket Num: %d Is: %d\n", counter, i);
             }
         }
-        printf("\n");
+        fprintf(stddbg, "\n");
         
-    } else if(strcmp(terminalInput,"q") == 0)
+    } else if (strcmp(terminalInput, "u") == 0) {
+        fprintf(stddbg, "\n\tUser Count: %d\n", usercount);
+        for (int i = 0; i < usercount; ++i)
+        {
+            fprintf(stddbg, "\tUser Num: %d {Name: %s, Description: %s, Messages Count: %d}\n", i + 1, users[i]->name, users[i]->description, users[i]->pendingMessageCount);
+        }
+        fprintf(stddbg, "\n");
+    }
+    else if (strcmp(terminalInput, "q") == 0)
     {
         fprintf(stdlog, "quitting\n");
+
+        for (int i = 0; i < FD_SETSIZE; ++i)
+        {
+            if (FD_ISSET(i, &connectedFileDescriptors))
+            {
+                close(i);
+            }
+        }
         close(serverSock);
         exit(EXIT_SUCCESS);
     }
@@ -241,10 +259,7 @@ void sendMessageToClient(int sock, char *cmd, char *data)
 int main()
 {
     createServerSocket();
-
-    fd_set terminalInput;
-    fd_set readyTerminalInput;
-
+    
     char terminalInputBuffer;
 
     FD_ZERO(&connectedFileDescriptors);

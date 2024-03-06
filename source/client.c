@@ -1,12 +1,14 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <unistd.h>
+#include <stdbool.h>
+#include <sys/time.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <errno.h>
-#include <stdbool.h>
+#include <time.h>
 
 #define stdlog stdout   // logging messages go to "stdlog"
 #define stddbg stdout   // debugging messages go to "stdlog"
@@ -16,6 +18,9 @@
 #define maxMessageLen maxCmdLen + maxDataLen
 
 #define maxMessageQueued 256
+
+#define maxNameLen 32
+#define maxDescriptionLen 256
 
 extern int errono;
 
@@ -27,6 +32,11 @@ const char* ADDR = "127.0.0.1";
 const char* DATA_DELIMITER = "~";
 const char* ARGS_DELIMITER = "|";
 
+fd_set connectedFileDescriptors;
+fd_set readyToReadFileDescriptors;
+fd_set readyToWriteFileDescriptors;
+fd_set errorFileDescriptors;
+
 int option = 1;
 
 int clientSock;
@@ -37,13 +47,17 @@ typedef struct {
     char data[maxDataLen];
 } readMessageStruct;
 
+char username[maxNameLen] = "test";
+char description[maxDescriptionLen] = "testDescription";
+
 // functions initialization
 readMessageStruct parseReadMessage(char message[maxMessageLen]);
 int createAndConnectSocket();
 void sendMessage(int sock, char cmd[maxCmdLen], char data[maxDataLen]);
-void sendSelfInfo();
+void sendLoginMessage();
 
-int isSocketConnected(int sockfd) { 
+int isSocketConnected(int sockfd) 
+{ 
     int error; 
     socklen_t len = sizeof(error); 
     int ret = getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &error, &len); 
@@ -57,7 +71,8 @@ int isSocketConnected(int sockfd) {
     } 
 } 
 
-readMessageStruct parseReadMessage(char message[maxMessageLen]) {
+readMessageStruct parseReadMessage(char message[maxMessageLen]) 
+{
     readMessageStruct messageObj;
 
     strcpy(messageObj.cmd, strtok(message, ARGS_DELIMITER));
@@ -80,8 +95,6 @@ int createAndConnectSocket()
         exit(EXIT_FAILURE);
     }
 
-    printf("%d\n", isSocketConnected(clientSock));
-
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(PORT);
     if ((inet_pton(AF_INET, ADDR, &serverAddr.sin_addr)) <= 0)
@@ -95,6 +108,8 @@ int createAndConnectSocket()
         fprintf(stderr, "createAndConnectSocket - connect() failed errno: %d\n", errno);
         exit(EXIT_FAILURE);
     }
+
+    fprintf(stdlog, "Socket Connected\n");
 }
 
 void sendMessage(int sock, char cmd[maxCmdLen], char data[maxDataLen])
@@ -110,27 +125,47 @@ void sendMessage(int sock, char cmd[maxCmdLen], char data[maxDataLen])
     fprintf(stdlog, "sendMessage - Message Sent To Server: %s\n", message);
 }
 
-void sendSelfInfo()
+void sendLoginMessage()
 {
-    char cmd[maxCmdLen];
-    char data[maxDataLen];
+    char cmd[maxCmdLen] = "login";
+    char data[maxDataLen] = "";
 
-    strcpy(cmd, "login");
+    strcat(data, username);
+    strcat(data, DATA_DELIMITER);
+    strcat(data, description);
+
+    sendMessage(clientSock, cmd, data);
 }
 
 int main(int argc, char const* argv[])
 {
-    
     createAndConnectSocket();
-    // sendSelfInfo();
-    printf("connected to server\n");
-    while(true){
-        sleep(2);
-        char test[100] = "test|this is a test";
+    sendLoginMessage();
 
-        // strcat(test, argv[1]);
+    char terminalInputBuffer;
+    
+    FD_ZERO(&connectedFileDescriptors);
+    FD_SET(clientSock, &connectedFileDescriptors);
+    FD_SET(0, &connectedFileDescriptors);  // stdin - 0
 
-        send(clientSock, test, strlen(test), 0);
+    while(true)
+    {
+        readyToReadFileDescriptors = connectedFileDescriptors;
+        readyToWriteFileDescriptors = connectedFileDescriptors;
+
+        if ((select(FD_SETSIZE, &readyToReadFileDescriptors, &readyToWriteFileDescriptors, NULL, NULL)) == -1)      // check readinnes of sockets
+        {
+            fprintf(stderr, "main - select() [sockets] failed errno: %d\n", errno);
+            exit(EXIT_FAILURE);
+        }
+
+
+        // if (FD_ISSET(0, &readyToReadFileDescriptors))   // userInput
+        // {   
+        //     char terminalInputBuffer[2];
+        //     fgets(terminalInputBuffer, sizeof(terminalInputBuffer), stdin);
+        //     (terminalInputBuffer);
+        // }
     }
 
     close(clientSock);
