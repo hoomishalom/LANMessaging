@@ -21,6 +21,9 @@
 #define maxDataLen 2048
 #define maxMessageLen maxCmdLen + maxDataLen
 
+#define maxLoggingMessageLen 1024
+#define maxErrorMessageLen 1024
+
 #define maxMessageQueued 256
 
 #define maxNameLen 32
@@ -33,6 +36,9 @@ const char* ADDR = "127.0.0.1";
 
 const char* DATA_DELIMITER = "~";
 const char* ARGS_DELIMITER = "|";
+
+char loggingMessage[maxLoggingMessageLen];
+char errorMessage[maxErrorMessageLen];
 
 fd_set connectedFileDescriptors;
 fd_set readyToReadFileDescriptors;
@@ -65,6 +71,8 @@ int usercount = 0;
 userInfo *users[maxUsers];
 
 // functions initialization
+void loggerPrint(char *data);
+void errorPrint(char *data);
 void createServerSocket();
 readMessageStruct parseReadMessage(char message[maxMessageLen]);
 int handleNewSocket();
@@ -72,40 +80,78 @@ void handleQuitReqeust();
 void handleLoginRequest(int sock,readMessageStruct messageObj);
 void handleIncomingRequest(int sock);
 void clearDebugTerminalInput();
-void handleDebugTerminalInput(char terminalInputBuffer[2]);
+void handleTerminalInput(char terminalInputBuffer[2]);
 void sendMessageToClient(int sock, char *cmd, char *data);
 
-void createServerSocket()
+void loggerPrint(char *data)
 {
+    char message[maxLoggingMessageLen];
+    char timestamp[32];
+
+    memset(message, 0, maxLoggingMessageLen);
+
+    snprintf(timestamp, sizeof(timestamp), "[%d] (log) ", time(NULL));
+
+    strcat(message, timestamp);
+    strcat(message, data);
+
+    fprintf(stdlog, message);
+
+    memset(&data, 0, sizeof(data));
+}
+
+void errorPrint(char *data)
+{
+    char message[maxLoggingMessageLen];
+    char timestamp[32];
+
+    memset(message, 0, maxLoggingMessageLen);
+
+    snprintf(timestamp, sizeof(timestamp), "[%d] (err) ", time(NULL));
+
+    strcat(message, timestamp);
+    strcat(message, data);
+
+    fprintf(stderr, message);
+    memset(&data, 0, sizeof(data));
+}
+
+void createServerSocket()
+{   
     if ((serverSock = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
-        fprintf(stderr, "createServerSocket - socket() failed errno: %d\n", errno);
+        snprintf(errorMessage, sizeof(errorMessage), "createServerSocket - socket() failed errno: %d\n", errno);
+        errorPrint(errorMessage);
         exit(EXIT_FAILURE);
     }
 
     if ((setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option))) == -1)
     {
-        fprintf(stderr, "createServerSocket - setsockopt() failed errno: %d\n", errno);
+        snprintf(errorMessage, sizeof(errorMessage), "createServerSocket - setsocketopt() failed errno: %d\n", errno);
+        errorPrint(errorMessage);
         exit(EXIT_FAILURE);
     }
     
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(PORT);
     if (inet_aton(ADDR, &serverAddr.sin_addr) == 0)    // sets serverAddr.sin_addr.s_addr
-    {
-        fprintf(stderr, "createServerSocket - inet_aton() failed errno: %d\n", errno);
+    {   
+        snprintf(errorMessage, sizeof(errorMessage), "createServerSocket - inet_aton() failed errno: %d\n", errno);
+        errorPrint(errorMessage);
         exit(EXIT_FAILURE);
     }
 
     if ((bind(serverSock, (struct sockaddr*)&serverAddr, sizeof(serverAddr))) == -1)
     {
-        fprintf(stderr, "createServerSocket - bind() failed errno: %d\n", errno);
+        snprintf(errorMessage, sizeof(errorMessage), "createServerSocket - bind() failed errno: %d\n", errno);
+        errorPrint(errorMessage);
         exit(EXIT_FAILURE);
     }
 
     if ((listen(serverSock, BACKLOG)) == -1)
     {
-        fprintf(stderr, "createServerSocket - listen() failed errno: %d\n", errno);
+        snprintf(errorMessage, sizeof(errorMessage), "createServerSocket - listen() failed errno: %d\n", errno);
+        errorPrint(errorMessage);
         exit(EXIT_FAILURE);
     }
 }
@@ -124,11 +170,13 @@ int handleNewSocket() {
 
     if ((clientSock = accept(serverSock, (struct sockaddr*)&serverAddr, &serverAddrLen)) == -1)
     {
-        fprintf(stderr, "handleNewSocket - accept() failed errno: %d\n", errno);
+        snprintf(errorMessage, sizeof(errorMessage), "handleNewSocket - accept() failed errno: %d\n", errno);
+        errorPrint(errorMessage);        
         exit(EXIT_FAILURE);
     }
 
-    fprintf(stdlog, "New connection from {ip: %s, port: %d, sock: %d}\n", inet_ntoa(serverAddr.sin_addr), serverAddr.sin_port, clientSock);
+    snprintf(loggingMessage, maxLoggingMessageLen, "New connection from {ip: %s, port: %d, sock: %d}\n", inet_ntoa(serverAddr.sin_addr), serverAddr.sin_port, clientSock);
+    loggerPrint(loggingMessage);
 
     return clientSock;
 }
@@ -145,7 +193,10 @@ void handleQuitReqeust(int sock)
         }
     }
     FD_CLR(sock, &connectedFileDescriptors);
-    fprintf(stdlog, "Dissconected sock: %d\n", sock);
+
+    snprintf(loggingMessage, maxLoggingMessageLen, "Dissconected sock: %d\n", sock);
+    loggerPrint(loggingMessage);
+    
     close(sock);
 }
 
@@ -170,11 +221,13 @@ void handleIncomingRequest(int sock)
 
     readMessageStruct messageObj;
 
-    bzero(messageBuffer, maxMessageLen);
+    memset(messageBuffer, 0, maxMessageLen);
 
     if ((readBytes = read(sock, messageBuffer, maxMessageLen)) == -1)
     {
-        fprintf(stderr, "handleIncomingRequest - read() failed errno: %d\n", errno);
+        snprintf(errorMessage, maxErrorMessageLen, "handleIncomingRequest - read() failed errno: %d\n", errno);
+        errorPrint(errorMessage);
+
         exit(EXIT_FAILURE);
     }
 
@@ -190,10 +243,14 @@ void handleIncomingRequest(int sock)
         handleQuitReqeust(sock);
     } else if (strcmp(messageObj.cmd, "login") == 0) {
         handleLoginRequest(sock, messageObj);
+    } else if (strcmp(messageObj.cmd, "test") == 0) {
+        snprintf(loggingMessage, maxLoggingMessageLen, "handleIncomingRequest - Test Data: %s, Recived\n", messageObj.data);
+        loggerPrint(loggingMessage);
     }
     else
-    {
-        fprintf(stdlog, "handleIncomingRequest - messageObj.cmd: %s, isn't known\n", messageObj.cmd);
+    {   
+        snprintf(loggingMessage, maxLoggingMessageLen, "handleIncomingRequest - messageObj.cmd: %s, isn't known\n", messageObj.cmd);
+        loggerPrint(loggingMessage);
     }
 
 }
@@ -204,8 +261,8 @@ void clearDebugTerminalInput()
     while ((c = getchar()) != '\n' && c != EOF);
 }
 
-void handleDebugTerminalInput(char terminalInput[2])
-{
+void handleTerminalInput(char terminalInput[2])
+{   
     if (strcmp(terminalInput, "d") == 0)
     {   
         int i;
@@ -226,13 +283,13 @@ void handleDebugTerminalInput(char terminalInput[2])
         fprintf(stddbg, "\n\tUser Count: %d\n", usercount);
         for (int i = 0; i < usercount; ++i)
         {
-            fprintf(stddbg, "\tUser Num: %d {Name: %s, Description: %s, Messages Count: %d}\n", i + 1, users[i]->name, users[i]->description, users[i]->pendingMessageCount);
+            fprintf(stddbg, "\tUser Num: %d {Socket: %d, Name: %s, Description: %s, Messages Count: %d}\n", i + 1, users[i]->socket, users[i]->name, users[i]->description, users[i]->pendingMessageCount);
         }
         fprintf(stddbg, "\n");
     }
     else if (strcmp(terminalInput, "q") == 0)
     {
-        fprintf(stdlog, "quitting\n");
+        loggerPrint("Quitting\n");
 
         for (int i = 0; i < FD_SETSIZE; ++i)
         {
@@ -246,7 +303,8 @@ void handleDebugTerminalInput(char terminalInput[2])
     }
     else
     {   
-        fprintf(stderr, "handleDebugTerminalInput - unknown command [%s]\n", terminalInput);
+        snprintf(errorMessage, maxErrorMessageLen, "handleIncomingRequest - read() failed errno: %d\n", errno);
+        errorPrint(errorMessage);        
     }
     clearDebugTerminalInput();
 }
@@ -274,15 +332,16 @@ int main()
 
         if ((select(FD_SETSIZE, &readyToReadFileDescriptors, NULL, NULL, NULL)) == -1)      // check readinnes of sockets
         {
-            fprintf(stderr, "main - select() [sockets] failed errno: %d\n", errno);
-            exit(EXIT_FAILURE);
+        snprintf(errorMessage, sizeof(errorMessage), "main - select() [sockets] failed errno: %d\n", errno);
+        errorPrint(errorMessage);            
+        exit(EXIT_FAILURE);
         }
 
         if (TERMINAL_DBG && FD_ISSET(0, &readyToReadFileDescriptors))   // debugg
         {   
             char terminalInputBuffer[2];
             fgets(terminalInputBuffer, sizeof(terminalInputBuffer), stdin);
-            handleDebugTerminalInput(terminalInputBuffer);
+            handleTerminalInput(terminalInputBuffer);
         }
 
         for (int i = 1; i < FD_SETSIZE; ++i)

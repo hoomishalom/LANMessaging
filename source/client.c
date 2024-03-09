@@ -55,6 +55,7 @@ readMessageStruct parseReadMessage(char message[maxMessageLen]);
 int createAndConnectSocket();
 void sendMessage(int sock, char cmd[maxCmdLen], char data[maxDataLen]);
 void sendLoginMessage();
+void handleTerminalInput(char terminalInput[2]);
 
 int isSocketConnected(int sockfd) 
 { 
@@ -115,6 +116,7 @@ int createAndConnectSocket()
 void sendMessage(int sock, char cmd[maxCmdLen], char data[maxDataLen])
 {
     char message[maxMessageLen];
+    memset(message, 0, maxMessageLen);
 
     strcat(message, cmd);
     strcat(message, ARGS_DELIMITER);
@@ -135,6 +137,17 @@ void sendLoginMessage()
     strcat(data, description);
 
     sendMessage(clientSock, cmd, data);
+}
+
+void handleTerminalInput(char terminalInput[2])
+{
+    if(strcmp(terminalInput, "t") == 0)
+    {
+        char cmd[maxCmdLen] = "test";
+        char data[maxDataLen] = "This Is A Test";
+
+        sendMessage(clientSock, cmd, data);
+    }
 }
 
 int main(int argc, char const* argv[])
@@ -160,12 +173,12 @@ int main(int argc, char const* argv[])
         }
 
 
-        // if (FD_ISSET(0, &readyToReadFileDescriptors))   // userInput
-        // {   
-        //     char terminalInputBuffer[2];
-        //     fgets(terminalInputBuffer, sizeof(terminalInputBuffer), stdin);
-        //     (terminalInputBuffer);
-        // }
+        if (FD_ISSET(0, &readyToReadFileDescriptors))   // userInput
+        {   
+            char terminalInputBuffer[2];
+            fgets(terminalInputBuffer, sizeof(terminalInputBuffer), stdin);
+            handleTerminalInput(terminalInputBuffer);
+        }
     }
 
     close(clientSock);
