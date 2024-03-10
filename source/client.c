@@ -51,20 +51,32 @@ struct sockaddr_in serverAddr;
 typedef struct {
     char cmd[maxCmdLen];
     char data[maxDataLen];
-} readMessageStruct;
+} messageStruct;
 
 char username[maxNameLen] = "test";
 char description[maxDescriptionLen] = "testDescription";
 
+messageStruct messagesQueue[maxMessageQueued];
+int messageQueueCount = 0;
+
+// queue intialization
+void enqueue(messageStruct queue[], messageStruct *msg);
+messageStruct dequeue(messageStruct queue[]);
+messageStruct head(messageStruct queue[]);
+messageStruct tail(messageStruct queue[]);
+
 // functions initialization
 void loggerPrint(char *data);
 void errorPrint(char *data);
-readMessageStruct parseReadMessage(char message[maxMessageLen]);
+messageStruct parseReadMessage(char message[maxMessageLen]);
 int createAndConnectSocket();
 void sendMessage(int sock, char cmd[maxCmdLen], char data[maxDataLen]);
 void sendLoginMessage();
 void handleTerminalInput(char terminalInput[2]);
 
+// queue functions
+
+// functions 
 void loggerPrint(char *data)
 {
     char message[maxLoggingMessageLen];
@@ -73,11 +85,17 @@ void loggerPrint(char *data)
     memset(message, 0, maxLoggingMessageLen);
 
     snprintf(timestamp, sizeof(timestamp), "[%d] (log) ", time(NULL));
-
+    
+    
     strcat(message, timestamp);
     strcat(message, data);
 
-    fprintf(stdlog, message);
+    if (message[strlen(message) - 1] == '\n') // removes trailing \n
+    {
+        message[strlen(message) - 1] = '\0';
+    }
+
+    fprintf(stdlog, "%s\n", message);
 
     memset(&data, 0, sizeof(data));
 }
@@ -94,7 +112,12 @@ void errorPrint(char *data)
     strcat(message, timestamp);
     strcat(message, data);
 
-    fprintf(stderr, message);
+    if (message[strlen(message) - 1] == '\n') // removes trailing \n
+    {
+        message[strlen(message) - 1] = '\0';
+    }
+
+    fprintf(stderr, "%s\n", message);
 
     memset(&data, 0, sizeof(data));
 }
@@ -114,9 +137,9 @@ int isSocketConnected(int sockfd)
     } 
 } 
 
-readMessageStruct parseReadMessage(char message[maxMessageLen])
+messageStruct parseReadMessage(char message[maxMessageLen])
 {
-    readMessageStruct messageObj;
+    messageStruct messageObj;
 
     strcpy(messageObj.cmd, strtok(message, ARGS_DELIMITER));
     strcpy(messageObj.data, strtok(message, ARGS_DELIMITER));
@@ -170,7 +193,7 @@ void sendMessage(int sock, char cmd[maxCmdLen], char data[maxDataLen])
 
     send(sock, message, sizeof(message), 0);
 
-    snprintf(loggingMessage, sizeof(loggingMessage), "sendMessage - Message Sent To Server: %s\n", message);
+    snprintf(loggingMessage, sizeof(loggingMessage), "sendMessage - Message Sent To Server: %s", message);
     loggerPrint(loggingMessage);
 }
 
@@ -197,13 +220,14 @@ void handleTerminalInput(char terminalInput[2])
         char cmd[maxCmdLen] = "send";
         char message[maxDataLen];
 
-        fflush(stdin);
+        printf("message: ");
+        fgets(message, 5, stdin); // makes sure the program waits for user input instead of just continuing
+
         fgets(message, sizeof(message), stdin);
         if (strlen(message) != 0)
         {
             sendMessage(clientSock, cmd, message);
         }
-        printf("\n");
     }
 }
 

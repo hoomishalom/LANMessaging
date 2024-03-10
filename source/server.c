@@ -101,7 +101,12 @@ void loggerPrint(char *data)
     strcat(message, timestamp);
     strcat(message, data);
 
-    fprintf(stdlog, message);
+    if (message[strlen(message) - 1] == '\n') // removes trailing \n
+    {
+        message[strlen(message) - 1] = '\0';
+    }
+
+    fprintf(stdlog, "%s\n", message);
 
     memset(&data, 0, sizeof(data));
 }
@@ -118,7 +123,13 @@ void errorPrint(char *data)
     strcat(message, timestamp);
     strcat(message, data);
 
-    fprintf(stderr, message);
+    if (message[strlen(message) - 1] == '\n') // removes trailing \n
+    {
+        message[strlen(message) - 1] = '\0';
+    }
+
+    fprintf(stderr, "%s\n", message);
+
     memset(&data, 0, sizeof(data));
 }
 
@@ -208,16 +219,16 @@ void handleQuitReqeust(int sock)
 
     if(index == -1)
     {
-        snprintf(errorMessage, sizeof(errorMessage), "handleQuitReqeust - Socket: %d, Not Found In Users\n", sock);
+        snprintf(errorMessage, sizeof(errorMessage), "handleQuitReqeust - Socket: %d, Not Found In Users", sock);
         errorPrint(errorMessage);
         return;
     }
 
-    free(users[index]);
+    memset(users[index], 0, sizeof(users[index]));  // remove userInfo from users array
 
     FD_CLR(sock, &connectedFileDescriptors);
 
-    snprintf(loggingMessage, maxLoggingMessageLen, "Dissconected sock: %d\n", sock);
+    snprintf(loggingMessage, maxLoggingMessageLen, "Dissconected sock: %d", sock);
     loggerPrint(loggingMessage);
     
     close(sock);
@@ -248,7 +259,7 @@ void handleIncomingRequest(int sock)
 
     if ((readBytes = read(sock, messageBuffer, maxMessageLen)) == -1)
     {
-        snprintf(errorMessage, maxErrorMessageLen, "handleIncomingRequest - read() failed errno: %d\n", errno);
+        snprintf(errorMessage, maxErrorMessageLen, "handleIncomingRequest - read() failed errno: %d", errno);
         errorPrint(errorMessage);
 
         exit(EXIT_FAILURE);
@@ -267,14 +278,13 @@ void handleIncomingRequest(int sock)
     } else if (strcmp(messageObj.cmd, "login") == 0) {
         handleLoginRequest(sock, messageObj);
     } else if (strcmp(messageObj.cmd, "test") == 0) {
-        snprintf(loggingMessage, maxLoggingMessageLen, "handleIncomingRequest - Test Data: %s, Recived\n", messageObj.data);
-        loggerPrint(loggingMessage);
+        handleNewMessage(sock, messageObj.data);
     } else if (strcmp(messageObj.cmd, "send") == 0) {
         handleNewMessage(sock, messageObj.data);
     }
     else
     {   
-        snprintf(loggingMessage, maxLoggingMessageLen, "handleIncomingRequest - messageObj.cmd: %s, isn't known\n", messageObj.cmd);
+        snprintf(loggingMessage, maxLoggingMessageLen, "handleIncomingRequest - messageObj.cmd: %s, isn't known", messageObj.cmd);
         loggerPrint(loggingMessage);
     }
 
@@ -290,6 +300,11 @@ void handleNewMessage(int sock, char message[maxDataLen])
         strcpy(users[i]->pendingMessages[users[i]->pendingMessageCount].message, message);
         strcpy(users[i]->pendingMessages[users[i]->pendingMessageCount].sender, sender);
         ++users[i]->pendingMessageCount;
+    }
+    
+    if (message[strlen(message) - 1] == '\n') // removes trailing \n
+    {
+        message[strlen(message) - 1] = '\0';
     }
     
     snprintf(loggingMessage, maxLoggingMessageLen, "handleNewMessage - Message: {sender: %s, data: %s}", sender, message);
