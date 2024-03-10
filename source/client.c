@@ -60,21 +60,55 @@ messageStruct messagesQueue[maxMessageQueued];
 int messageQueueCount = 0;
 
 // queue intialization
-void enqueue(messageStruct queue[], messageStruct *msg);
-messageStruct dequeue(messageStruct queue[]);
-messageStruct head(messageStruct queue[]);
-messageStruct tail(messageStruct queue[]);
+void enqueue(messageStruct queue[maxMessageQueued], messageStruct *msg);
+messageStruct *dequeue(messageStruct queue[maxMessageQueued]);
+messageStruct *head(messageStruct queue[maxMessageQueued]);
+messageStruct tail(messageStruct queue[maxMessageQueued]);
 
 // functions initialization
 void loggerPrint(char *data);
 void errorPrint(char *data);
 messageStruct parseReadMessage(char message[maxMessageLen]);
 int createAndConnectSocket();
-void sendMessage(int sock, char cmd[maxCmdLen], char data[maxDataLen]);
+void disconnect(int sock);
+void sendMessage(int sock, messageStruct *input);
 void sendLoginMessage();
 void handleTerminalInput(char terminalInput[2]);
 
 // queue functions
+void enqueue(messageStruct queue[maxMessageQueued], messageStruct *msg)
+{
+    if (messageQueueCount < maxMessageQueued) {
+        strcpy(queue[messageQueueCount].cmd, msg->cmd);
+        strcpy(queue[messageQueueCount].data, msg->data);
+
+        ++messageQueueCount;
+    } else {
+        errorPrint("Messages Are Not Being Sent To Server, Closing Client Connection");
+    }
+}
+
+messageStruct *dequeue(messageStruct queue[maxMessageQueued])
+{
+    messageStruct *message;
+    if (messageQueueCount > 0)
+    {
+        message = &queue[messageQueueCount - 1];
+        --messageQueueCount;
+    }
+
+    return message;
+}
+
+messageStruct *head(messageStruct queue[maxMessageQueued])
+{
+    return &queue[0];
+}
+
+messageStruct tail(messageStruct queue[maxMessageQueued])
+{
+    return queue[messageQueueCount - 1];
+}
 
 // functions 
 void loggerPrint(char *data)
@@ -182,14 +216,23 @@ int createAndConnectSocket()
     loggerPrint("Socket Connected\n");
 }
 
-void sendMessage(int sock, char cmd[maxCmdLen], char data[maxDataLen])
+void disconnect(int sock)
+{
+    close(sock);
+    loggerPrint("Socket Disconnected\n");
+    exit(EXIT_SUCCESS);
+}
+
+void sendMessage(int sock, messageStruct *input)
 {
     char message[maxMessageLen];
     memset(message, 0, maxMessageLen);
 
-    strcat(message, cmd);
+    printf("%s\n", input->cmd);
+
+    strcat(message, input->cmd);
     strcat(message, ARGS_DELIMITER);
-    strcat(message, data);
+    strcat(message, input->data);
 
     send(sock, message, sizeof(message), 0);
 
@@ -201,12 +244,16 @@ void sendLoginMessage()
 {
     char cmd[maxCmdLen] = "login";
     char data[maxDataLen] = "";
+    messageStruct msg;
 
     strcat(data, username);
     strcat(data, DATA_DELIMITER);
     strcat(data, description);
 
-    sendMessage(clientSock, cmd, data);
+    strcpy(msg.cmd, cmd);
+    strcpy(msg.data, data);
+
+    enqueue(messagesQueue, &msg);
 }
 
 void handleTerminalInput(char terminalInput[2])
@@ -214,27 +261,31 @@ void handleTerminalInput(char terminalInput[2])
     if(strcmp(terminalInput, "t") == 0){
         char cmd[maxCmdLen] = "test";
         char data[maxDataLen] = "This Is A Test";
+        messageStruct msg;
+        strcpy(msg.cmd, cmd);
+        strcpy(msg.data, data);
 
-        sendMessage(clientSock, cmd, data);
+        sendMessage(clientSock, &msg);
+    } else if(strcmp(terminalInput, "q") == 0){
+        disconnect(clientSock);
     } else if(strcmp(terminalInput, "s") == 0){
         char cmd[maxCmdLen] = "send";
-        char message[maxDataLen];
+        char data[maxDataLen];
+        messageStruct message;
 
         printf("message: ");
-        fgets(message, 5, stdin); // makes sure the program waits for user input instead of just continuing
+        fgets(data, 5, stdin); // makes sure the program waits for user input instead of just continuing
 
-        fgets(message, sizeof(message), stdin);
-        if (strlen(message) != 0)
+        fgets(data, sizeof(data), stdin);
+        if (strlen(data) != 0)
         {
-            sendMessage(clientSock, cmd, message);
+            enqueue(messagesQueue, &message);
         }
     }
 }
 
-int main(int argc, char const* argv[])
+void runClient()
 {
-    createAndConnectSocket();
-    sendLoginMessage();
 
     char terminalInputBuffer;
     
@@ -261,7 +312,22 @@ int main(int argc, char const* argv[])
             fgets(terminalInputBuffer, sizeof(terminalInputBuffer), stdin);
             handleTerminalInput(terminalInputBuffer);
         }
-    }
 
+        if (FD_ISSET(clientSock, &readyToWriteFileDescriptors)) // check writeinnes of sockets (server)
+        {
+            if (messageQueueCount > 0)
+            {
+                sendMessage(clientSock, dequeue(messagesQueue));
+            }
+        }
+    }
+}
+
+int main(int argc, char const* argv[])
+{
+    createAndConnectSocket();
+    sendLoginMessage();
+    runClient();
     close(clientSock);
+    return 0;
 }
