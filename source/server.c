@@ -57,13 +57,16 @@ typedef struct {
     char data[maxDataLen];
 } readMessageStruct;
 
-char messagesToSend[maxMessageQueued][maxMessageLen];
+typedef struct {
+    char sender[maxNameLen];
+    char message[maxMessageLen];
+} message;
 
 typedef struct {
     int socket;
     char name[maxNameLen];
     char description[maxDescriptionLen];
-    char pendingMessages[maxMessageQueued][maxMessageLen];
+    message pendingMessages[maxMessageQueued];
     int pendingMessageCount;
 } userInfo;
 
@@ -74,14 +77,17 @@ userInfo *users[maxUsers];
 void loggerPrint(char *data);
 void errorPrint(char *data);
 void createServerSocket();
-readMessageStruct parseReadMessage(char message[maxMessageLen]);
+readMessageStruct parseMessage(char message[maxMessageLen]);
+int locateInfoBySocket(int socket);
 int handleNewSocket();
 void handleQuitReqeust();
 void handleLoginRequest(int sock,readMessageStruct messageObj);
 void handleIncomingRequest(int sock);
+void handleNewMessage(int sock, char message[maxDataLen]);
 void clearDebugTerminalInput();
 void handleTerminalInput(char terminalInputBuffer[2]);
 void sendMessageToClient(int sock, char *cmd, char *data);
+void runServer();
 
 void loggerPrint(char *data)
 {
@@ -156,7 +162,8 @@ void createServerSocket()
     }
 }
 
-readMessageStruct parseReadMessage(char message[maxMessageLen]) {
+readMessageStruct parseMessage(char message[maxMessageLen])
+{
     readMessageStruct messageObj;
 
     strcpy(messageObj.cmd, strtok(message, ARGS_DELIMITER));
@@ -165,7 +172,21 @@ readMessageStruct parseReadMessage(char message[maxMessageLen]) {
     return messageObj;
 }
 
-int handleNewSocket() {
+int locateInfoBySocket(int socket)
+{
+    for (int i = 0; i < usercount; ++i)
+    {
+        if (users[i]->socket == socket)
+        {
+            return i;
+            break;
+        }
+    }
+    return -1;
+}
+
+int handleNewSocket()
+{
     int clientSock;
 
     if ((clientSock = accept(serverSock, (struct sockaddr*)&serverAddr, &serverAddrLen)) == -1)
@@ -183,15 +204,17 @@ int handleNewSocket() {
 
 void handleQuitReqeust(int sock)
 {
-    for (int i = 0; i < usercount; ++i)
+    int index = locateInfoBySocket(sock);
+
+    if(index == -1)
     {
-        if (users[i]->socket == sock)
-        {
-            free(users[i]);
-            --usercount;
-            break;
-        }
+        snprintf(errorMessage, sizeof(errorMessage), "handleQuitReqeust - Socket: %d, Not Found In Users\n", sock);
+        errorPrint(errorMessage);
+        return;
     }
+
+    free(users[index]);
+
     FD_CLR(sock, &connectedFileDescriptors);
 
     snprintf(loggingMessage, maxLoggingMessageLen, "Dissconected sock: %d\n", sock);
@@ -237,7 +260,7 @@ void handleIncomingRequest(int sock)
         return;
     }
 
-    messageObj = parseReadMessage(messageBuffer);
+    messageObj = parseMessage(messageBuffer);
     
     if (strcmp(messageObj.cmd, "quit") == 0) {
         handleQuitReqeust(sock);
@@ -246,6 +269,8 @@ void handleIncomingRequest(int sock)
     } else if (strcmp(messageObj.cmd, "test") == 0) {
         snprintf(loggingMessage, maxLoggingMessageLen, "handleIncomingRequest - Test Data: %s, Recived\n", messageObj.data);
         loggerPrint(loggingMessage);
+    } else if (strcmp(messageObj.cmd, "send") == 0) {
+        handleNewMessage(sock, messageObj.data);
     }
     else
     {   
@@ -253,6 +278,22 @@ void handleIncomingRequest(int sock)
         loggerPrint(loggingMessage);
     }
 
+}
+
+void handleNewMessage(int sock, char message[maxDataLen])
+{
+    char sender[maxNameLen];
+
+    strcpy(sender, users[locateInfoBySocket(sock)]->name);
+    for (int i = 0; i < usercount; ++i)
+    {
+        strcpy(users[i]->pendingMessages[users[i]->pendingMessageCount].message, message);
+        strcpy(users[i]->pendingMessages[users[i]->pendingMessageCount].sender, sender);
+        ++users[i]->pendingMessageCount;
+    }
+    
+    snprintf(loggingMessage, maxLoggingMessageLen, "handleNewMessage - Message: {sender: %s, data: %s}", sender, message);
+    loggerPrint(loggingMessage);
 }
 
 void clearDebugTerminalInput()
@@ -298,7 +339,6 @@ void handleTerminalInput(char terminalInput[2])
                 close(i);
             }
         }
-        close(serverSock);
         exit(EXIT_SUCCESS);
     }
     else
@@ -314,10 +354,8 @@ void sendMessageToClient(int sock, char *cmd, char *data)
 
 }
 
-int main()
+void runServer()
 {
-    createServerSocket();
-    
     char terminalInputBuffer;
 
     FD_ZERO(&connectedFileDescriptors);
@@ -362,7 +400,12 @@ int main()
             }
         }
     }
+}
 
+int main()
+{
+    createServerSocket();
+    runServer();
     close(serverSock);
     return 0;
 }

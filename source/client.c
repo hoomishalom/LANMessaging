@@ -15,7 +15,10 @@
 
 #define maxCmdLen 256
 #define maxDataLen 2048
-#define maxMessageLen maxCmdLen + maxDataLen
+#define maxMessageLen maxCmdLen + maxDataLen - 16 // 16 - buffer for delimiters
+
+#define maxLoggingMessageLen 1024
+#define maxErrorMessageLen 1024
 
 #define maxMessageQueued 256
 
@@ -31,6 +34,9 @@ const char* ADDR = "127.0.0.1";
 
 const char* DATA_DELIMITER = "~";
 const char* ARGS_DELIMITER = "|";
+
+char loggingMessage[maxLoggingMessageLen];
+char errorMessage[maxErrorMessageLen];
 
 fd_set connectedFileDescriptors;
 fd_set readyToReadFileDescriptors;
@@ -51,13 +57,49 @@ char username[maxNameLen] = "test";
 char description[maxDescriptionLen] = "testDescription";
 
 // functions initialization
+void loggerPrint(char *data);
+void errorPrint(char *data);
 readMessageStruct parseReadMessage(char message[maxMessageLen]);
 int createAndConnectSocket();
 void sendMessage(int sock, char cmd[maxCmdLen], char data[maxDataLen]);
 void sendLoginMessage();
 void handleTerminalInput(char terminalInput[2]);
 
-int isSocketConnected(int sockfd) 
+void loggerPrint(char *data)
+{
+    char message[maxLoggingMessageLen];
+    char timestamp[32];
+
+    memset(message, 0, maxLoggingMessageLen);
+
+    snprintf(timestamp, sizeof(timestamp), "[%d] (log) ", time(NULL));
+
+    strcat(message, timestamp);
+    strcat(message, data);
+
+    fprintf(stdlog, message);
+
+    memset(&data, 0, sizeof(data));
+}
+
+void errorPrint(char *data)
+{
+    char message[maxLoggingMessageLen];
+    char timestamp[32];
+
+    memset(message, 0, maxLoggingMessageLen);
+
+    snprintf(timestamp, sizeof(timestamp), "[%d] (err) ", time(NULL));
+
+    strcat(message, timestamp);
+    strcat(message, data);
+
+    fprintf(stderr, message);
+
+    memset(&data, 0, sizeof(data));
+}
+
+int isSocketConnected(int sockfd)
 { 
     int error; 
     socklen_t len = sizeof(error); 
@@ -72,7 +114,7 @@ int isSocketConnected(int sockfd)
     } 
 } 
 
-readMessageStruct parseReadMessage(char message[maxMessageLen]) 
+readMessageStruct parseReadMessage(char message[maxMessageLen])
 {
     readMessageStruct messageObj;
 
@@ -86,13 +128,15 @@ int createAndConnectSocket()
 {
     if ((clientSock = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
-        fprintf(stderr, "createAndConnectSocket - socket() failed errno: %d\n", errno);
+        snprintf(errorMessage, sizeof(errorMessage), "createAndConnectSocket - socket() failed errno: %d\n", errno);
+        errorPrint(errorMessage);
         exit(EXIT_FAILURE);
     }
 
     if ((setsockopt(clientSock, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option))) == -1)
     {
-        fprintf(stderr, "createAndConnectSocket - setsockopt() failed errno: %d\n", errno);
+        snprintf(errorMessage, sizeof(errorMessage), "createAndConnectSocket - setsockopt() failed errno: %d\n", errno);
+        errorPrint(errorMessage);
         exit(EXIT_FAILURE);
     }
 
@@ -100,17 +144,19 @@ int createAndConnectSocket()
     serverAddr.sin_port = htons(PORT);
     if ((inet_pton(AF_INET, ADDR, &serverAddr.sin_addr)) <= 0)
     {
-        fprintf(stderr, "createAndConnectSocket - inet_pton() failed errno: %d\n", errno);
+        snprintf(errorMessage, sizeof(errorMessage), "createAndConnectSocket - inet_pton() failed errno: %d\n", errno);
+        errorPrint(errorMessage);
         exit(EXIT_FAILURE);
     }
 
     if ((connect(clientSock, (struct sockaddr *)&serverAddr, sizeof(serverAddr))) == -1)
     {
-        fprintf(stderr, "createAndConnectSocket - connect() failed errno: %d\n", errno);
+        snprintf(errorMessage, sizeof(errorMessage), "createAndConnectSocket - connect() failed errno: %d\n", errno);
+        errorPrint(errorMessage);
         exit(EXIT_FAILURE);
     }
 
-    fprintf(stdlog, "Socket Connected\n");
+    loggerPrint("Socket Connected\n");
 }
 
 void sendMessage(int sock, char cmd[maxCmdLen], char data[maxDataLen])
@@ -124,7 +170,8 @@ void sendMessage(int sock, char cmd[maxCmdLen], char data[maxDataLen])
 
     send(sock, message, sizeof(message), 0);
 
-    fprintf(stdlog, "sendMessage - Message Sent To Server: %s\n", message);
+    snprintf(loggingMessage, sizeof(loggingMessage), "sendMessage - Message Sent To Server: %s\n", message);
+    loggerPrint(loggingMessage);
 }
 
 void sendLoginMessage()
@@ -141,12 +188,22 @@ void sendLoginMessage()
 
 void handleTerminalInput(char terminalInput[2])
 {
-    if(strcmp(terminalInput, "t") == 0)
-    {
+    if(strcmp(terminalInput, "t") == 0){
         char cmd[maxCmdLen] = "test";
         char data[maxDataLen] = "This Is A Test";
 
         sendMessage(clientSock, cmd, data);
+    } else if(strcmp(terminalInput, "s") == 0){
+        char cmd[maxCmdLen] = "send";
+        char message[maxDataLen];
+
+        fflush(stdin);
+        fgets(message, sizeof(message), stdin);
+        if (strlen(message) != 0)
+        {
+            sendMessage(clientSock, cmd, message);
+        }
+        printf("\n");
     }
 }
 
@@ -168,7 +225,8 @@ int main(int argc, char const* argv[])
 
         if ((select(FD_SETSIZE, &readyToReadFileDescriptors, &readyToWriteFileDescriptors, NULL, NULL)) == -1)      // check readinnes of sockets
         {
-            fprintf(stderr, "main - select() [sockets] failed errno: %d\n", errno);
+            snprintf(errorMessage, sizeof(errorMessage), "main - select() [sockets] failed errno: %d\n", errno);
+            errorPrint(errorMessage);
             exit(EXIT_FAILURE);
         }
 
